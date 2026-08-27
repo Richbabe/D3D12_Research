@@ -160,6 +160,9 @@ private:
 
 void DrawProfilerHUD();
 
+// Compact readout of frame rate and CPU/GPU frame times. Requires the profilers to be running.
+void DrawProfilerStats();
+
 
 // Data for a single frame of profiling events. On for each history frame
 class ProfilerEventData

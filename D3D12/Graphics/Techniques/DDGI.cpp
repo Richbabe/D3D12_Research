@@ -197,6 +197,11 @@ void DDGI::RenderVisualization(RGGraph& graph, const SceneView* pView, const Wor
 	int i = 0;
 	ddgi_view.each([&](const DDGIVolume& volume)
 		{
+			// Volumes without probe data aren't published to the GPU volume buffer, so skipping them here
+			// keeps VolumeIndex lined up with Renderer::UploadSceneData.
+			if (!volume.pIrradianceHistory || !volume.pDepthHistory || !volume.pProbeOffset || !volume.pProbeStates)
+				return;
+
 			graph.AddPass("DDGI Visualize", RGPassFlag::Raster)
 				.DepthStencil(sceneTextures.pDepth)
 				.RenderTarget(sceneTextures.pColorTarget)

@@ -106,10 +106,12 @@ namespace Tweakables
 	ConsoleCommand<const char*> gVisualizeTexture("vis", [](const char* pName) { VisualizeTextureName = pName; });
 
 	// Lighting
-	float gSunInclination = 0.79f;
-	float gSunOrientation = -0.15f;
 	float gSunTemperature = 5900.0f;
 	float gSunIntensity = 5.0f;
+
+	// Frame pacing, owned by App
+	extern ConsoleVariable<bool> gLimitFPS;
+	extern ConsoleVariable<int> gMaxFPS;
 }
 
 
@@ -175,6 +177,7 @@ void DemoApp::SetupScene(const char* pPath)
 		entt::entity entity = m_World.CreateEntity("Sunlight");
 		Transform& transform = m_World.Registry.emplace<Transform>(entity);
 		transform.Position = Vector3::Zero;
+		transform.Rotation = Quaternion::CreateFromYawPitchRoll(Math::Radians(8.6f), Math::Radians(71.1f), 0.0f);
 
 		Light& sunLight = m_World.Registry.emplace<Light>(entity);
 		sunLight.Intensity = 10;
@@ -287,8 +290,6 @@ void DemoApp::Update()
 		}
 
 		Light& sunLight = m_World.Registry.get<Light>(m_World.Sunlight);
-		Transform& sunTransform = m_World.Registry.get<Transform>(m_World.Sunlight);
-		sunTransform.Rotation = Quaternion::CreateFromYawPitchRoll(-Tweakables::gSunOrientation, Tweakables::gSunInclination * Math::PI_DIV_2, 0);
 		sunLight.Colour = Math::MakeFromColorTemperature(Tweakables::gSunTemperature);
 		sunLight.Intensity = Tweakables::gSunIntensity;
 
@@ -778,7 +779,7 @@ void DemoApp::Update()
 				graph.Export(sceneTextures.pColorTarget, &m_pColorHistory, TextureFlag::ShaderResource);
 
 				// Probes contain irradiance data, and need to go through tonemapper.
-				if (Tweakables::gVisualizeDDGI)
+				if (Tweakables::gVisualizeDDGI && Tweakables::gEnableDDGI)
 				{
 					m_pDDGI->RenderVisualization(graph, pView, pWorldMut, sceneTextures);
 				}
@@ -1037,6 +1038,7 @@ void DemoApp::UpdateImGui()
 
 	static ImGuiConsole console;
 	static bool showProfiler = false;
+	static bool showStats = true;
 	static bool showImguiDemo = false;
 	static bool showToolMetrics = false;
 
@@ -1089,6 +1091,10 @@ void DemoApp::UpdateImGui()
 			if (ImGui::MenuItem(ICON_FA_CLOCK_O " Profiler", "Ctrl + P", showProfiler))
 			{
 				showProfiler = !showProfiler;
+			}
+			if (ImGui::MenuItem(ICON_FA_TACHOMETER " Stats", nullptr, showStats))
+			{
+				showStats = !showStats;
 			}
 			if (ImGui::MenuItem("RenderGraph Resource Tracker", "Ctrl + R"))
 			{
@@ -1187,9 +1193,27 @@ void DemoApp::UpdateImGui()
 			{
 				if (ImGui::TreeNodeEx("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 				{
-					ImGui::InputFloat3("Position", &transform->Position.x);
-					ImGui::InputFloat3("Scale", &transform->Scale.x);
-					ImGui::InputFloat4("Rotation", &transform->Rotation.x);
+					ImGui::DragFloat3("Position", &transform->Position.x, 0.1f);
+
+					// Euler angles are kept alongside the quaternion rather than derived every frame:
+					// round-tripping through ToEuler() makes the widget jump near the singularities and
+					// loses which of the equivalent angle triplets the user was dragging.
+					static entt::entity eulerOwner = entt::null;
+					static Vector3 eulerDegrees;
+					static Quaternion eulerSource;
+					if (eulerOwner != selectedEntity || transform->Rotation != eulerSource)
+					{
+						eulerOwner = selectedEntity;
+						eulerSource = transform->Rotation;
+						eulerDegrees = eulerSource.ToEuler() * Math::RadiansToDegrees;
+					}
+					if (ImGui::DragFloat3("Rotation", &eulerDegrees.x, 0.5f))
+					{
+						transform->Rotation = Quaternion::CreateFromYawPitchRoll(eulerDegrees * Math::DegreesToRadians);
+						eulerSource = transform->Rotation;
+					}
+
+					ImGui::DragFloat3("Scale", &transform->Scale.x, 0.1f);
 					ImGui::TreePop();
 				}
 			}
@@ -1320,16 +1344,42 @@ void DemoApp::UpdateImGui()
 		}
 		ImGui::End();
 	}
+	else if (showStats)
+	{
+		// The stats are read back from the profilers, so they have to keep sampling.
+		gCPUProfiler.SetPaused(false);
+		gGPUProfiler.SetPaused(false);
+	}
 	else
 	{
 		gCPUProfiler.SetPaused(true);
 		gGPUProfiler.SetPaused(true);
 	}
 
+	if (showStats)
+	{
+		if (ImGui::Begin(ICON_FA_TACHOMETER " Stats", &showStats))
+		{
+			DrawProfilerStats();
+		}
+		ImGui::End();
+	}
+
 	if (ImGui::Begin("Parameters"))
 	{
 		if (ImGui::CollapsingHeader("General"))
 		{
+			bool vsync = m_pSwapchain->GetVSync();
+			if (ImGui::Checkbox("Vertical Sync", &vsync))
+				m_pSwapchain->SetVSync(vsync);
+
+			ImGui::Checkbox("Limit FPS", &Tweakables::gLimitFPS.Get());
+			ImGui::BeginDisabled(!Tweakables::gLimitFPS);
+			ImGui::SliderInt("Max FPS", &Tweakables::gMaxFPS.Get(), 10, 240);
+			ImGui::EndDisabled();
+			if (vsync)
+				ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.4f, 1.0f), "V-Sync caps the frame rate to the display refresh rate");
+
 			static constexpr const char* pPathNames[] =
 			{
 				"Tiled",
@@ -1386,9 +1436,6 @@ void DemoApp::UpdateImGui()
 
 		if (ImGui::CollapsingHeader("Swapchain"))
 		{
-			bool vsync = m_pSwapchain->GetVSync();
-			if (ImGui::Checkbox("Vertical Sync", &vsync))
-				m_pSwapchain->SetVSync(vsync);
 			int swapchainFrames = m_pSwapchain->GetNumFrames();
 			if (ImGui::SliderInt("Swapchain Frames", &swapchainFrames, 2, 5))
 				m_pSwapchain->SetNumFrames(swapchainFrames);
@@ -1402,8 +1449,16 @@ void DemoApp::UpdateImGui()
 
 		if (ImGui::CollapsingHeader("Atmosphere"))
 		{
-			ImGui::SliderFloat("Sun Orientation", &Tweakables::gSunOrientation, -Math::PI, Math::PI);
-			ImGui::SliderFloat("Sun Inclination", &Tweakables::gSunInclination, 0, 1);
+			if (Transform* pSunTransform = m_World.Registry.try_get<Transform>(m_World.Sunlight))
+			{
+				const Vector3 euler = pSunTransform->Rotation.ToEuler();
+				float orientation = -euler.y;
+				float inclination = euler.x / Math::PI_DIV_2;
+				bool changed = ImGui::SliderFloat("Sun Orientation", &orientation, -Math::PI, Math::PI);
+				changed |= ImGui::SliderFloat("Sun Inclination", &inclination, 0, 1);
+				if (changed)
+					pSunTransform->Rotation = Quaternion::CreateFromYawPitchRoll(-orientation, inclination * Math::PI_DIV_2, 0);
+			}
 			ImGui::SliderFloat("Sun Temperature", &Tweakables::gSunTemperature, 1000, 15000);
 			ImGui::SliderFloat("Sun Intensity", &Tweakables::gSunIntensity, 0, 30);
 			ImGui::Checkbox("Sky", &Tweakables::gSky.Get());

@@ -210,23 +210,33 @@ namespace Renderer
 		}
 
 		// DDGI
-		if (Tweakables::gEnableDDGI)
 		{
 			std::vector<ShaderInterop::DDGIVolume> ddgiVolumes;
-			auto ddgi_view = pWorld->Registry.view<Transform, DDGIVolume>();
-			ddgi_view.each([&](const Transform& transform, const DDGIVolume& volume)
-				{
-					ShaderInterop::DDGIVolume& ddgi = ddgiVolumes.emplace_back();
-					ddgi.BoundsMin				= transform.Position - volume.Extents;
-					ddgi.ProbeSize				= 2 * volume.Extents / (Vector3((float)volume.NumProbes.x, (float)volume.NumProbes.y, (float)volume.NumProbes.z) - Vector3::One);
-					ddgi.ProbeVolumeDimensions	= Vector3u(volume.NumProbes.x, volume.NumProbes.y, volume.NumProbes.z);
-					ddgi.IrradianceIndex		= volume.pIrradianceHistory ? volume.pIrradianceHistory->GetSRVIndex() : DescriptorHandle::InvalidHeapIndex;
-					ddgi.DepthIndex				= volume.pDepthHistory ? volume.pDepthHistory->GetSRVIndex() : DescriptorHandle::InvalidHeapIndex;
-					ddgi.ProbeOffsetIndex		= volume.pProbeOffset ? volume.pProbeOffset->GetSRVIndex() : DescriptorHandle::InvalidHeapIndex;
-					ddgi.ProbeStatesIndex		= volume.pProbeStates ? volume.pProbeStates->GetSRVIndex() : DescriptorHandle::InvalidHeapIndex;
-					ddgi.NumRaysPerProbe		= volume.NumRays;
-					ddgi.MaxRaysPerProbe		= volume.MaxNumRays;
-				});
+			if (Tweakables::gEnableDDGI)
+			{
+				auto ddgi_view = pWorld->Registry.view<Transform, DDGIVolume>();
+				ddgi_view.each([&](const Transform& transform, const DDGIVolume& volume)
+					{
+						// Consumers index the descriptor heap with these unguarded, so a volume that hasn't been
+						// through DDGI::Execute yet has to be left out entirely rather than published with
+						// invalid indices.
+						if (!volume.pIrradianceHistory || !volume.pDepthHistory || !volume.pProbeOffset || !volume.pProbeStates)
+							return;
+
+						ShaderInterop::DDGIVolume& ddgi = ddgiVolumes.emplace_back();
+						ddgi.BoundsMin				= transform.Position - volume.Extents;
+						ddgi.ProbeSize				= 2 * volume.Extents / (Vector3((float)volume.NumProbes.x, (float)volume.NumProbes.y, (float)volume.NumProbes.z) - Vector3::One);
+						ddgi.ProbeVolumeDimensions	= Vector3u(volume.NumProbes.x, volume.NumProbes.y, volume.NumProbes.z);
+						ddgi.IrradianceIndex		= volume.pIrradianceHistory->GetSRVIndex();
+						ddgi.DepthIndex				= volume.pDepthHistory->GetSRVIndex();
+						ddgi.ProbeOffsetIndex		= volume.pProbeOffset->GetSRVIndex();
+						ddgi.ProbeStatesIndex		= volume.pProbeStates->GetSRVIndex();
+						ddgi.NumRaysPerProbe		= volume.NumRays;
+						ddgi.MaxRaysPerProbe		= volume.MaxNumRays;
+					});
+			}
+			// Always uploaded: the view uniforms dereference the buffer unconditionally, and leaving a stale
+			// volume count behind keeps shaders sampling probe data that is no longer being produced.
 			CopyBufferData((uint32)ddgiVolumes.size(), sizeof(ShaderInterop::DDGIVolume), "DDGI Volumes", ddgiVolumes.data(), pView->DDGIVolumesBuffer);
 		}
 

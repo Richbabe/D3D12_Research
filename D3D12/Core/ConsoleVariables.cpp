@@ -6,8 +6,20 @@
 
 #include <External/Imgui/imgui_internal.h>
 
-static std::unordered_map<StringHash, IConsoleObject*> gCvarMap;
-static std::vector<IConsoleObject*> gConsoleObjects;
+// Console objects are globals that register themselves during dynamic initialization, which can happen
+// before this translation unit's own globals are constructed. Function locals are guaranteed to be
+// constructed on first use, so registration works no matter what order the linker settles on.
+static std::unordered_map<StringHash, IConsoleObject*>& CvarMap()
+{
+	static std::unordered_map<StringHash, IConsoleObject*> map;
+	return map;
+}
+
+static std::vector<IConsoleObject*>& ConsoleObjects()
+{
+	static std::vector<IConsoleObject*> objects;
+	return objects;
+}
 
 void ConsoleManager::Initialize()
 {
@@ -26,11 +38,13 @@ void ConsoleManager::RegisterConsoleObject(const char* pName, IConsoleObject* pO
 {
 	char lowerName[256];
 	CString::ToLower(pName, lowerName);
-	if (gCvarMap.find(lowerName) == gCvarMap.end())
+	std::unordered_map<StringHash, IConsoleObject*>& cvarMap = CvarMap();
+	if (cvarMap.find(lowerName) == cvarMap.end())
 	{
-		gCvarMap[lowerName] = pObject;
-		gConsoleObjects.push_back(pObject);
-		std::sort(gConsoleObjects.begin(), gConsoleObjects.end(), [](IConsoleObject* pA, IConsoleObject* pB) { return strcmp(pA->GetName(), pB->GetName()) < 0; });
+		cvarMap[lowerName] = pObject;
+		std::vector<IConsoleObject*>& objects = ConsoleObjects();
+		objects.push_back(pObject);
+		std::sort(objects.begin(), objects.end(), [](IConsoleObject* pA, IConsoleObject* pB) { return strcmp(pA->GetName(), pB->GetName()) < 0; });
 	}
 }
 
@@ -48,8 +62,8 @@ bool ConsoleManager::Execute(const char* pCommand)
 		char cmd[128];
 		CString::ToLower(argList[0], cmd);
 
-		auto it = gCvarMap.find(cmd);
-		if (it != gCvarMap.end())
+		auto it = CvarMap().find(cmd);
+		if (it != CvarMap().end())
 		{
 			if (IConsoleVariable* pVariable = it->second->AsVariable())
 			{
@@ -73,13 +87,13 @@ IConsoleObject* ConsoleManager::FindConsoleObject(const char* pName)
 {
 	char lowerName[256];
 	CString::ToLower(pName, lowerName);
-	auto it = gCvarMap.find(lowerName);
-	return it != gCvarMap.end() ? it->second : nullptr;
+	auto it = CvarMap().find(lowerName);
+	return it != CvarMap().end() ? it->second : nullptr;
 }
 
 const std::vector<IConsoleObject*>& ConsoleManager::GetObjects()
 {
-	return gConsoleObjects;
+	return ConsoleObjects();
 }
 
 void ImGuiConsole::Update()

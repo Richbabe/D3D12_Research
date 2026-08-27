@@ -688,4 +688,68 @@ void DrawProfilerHUD()
 	DrawProfilerTimeline(ImVec2(0, 0));
 }
 
+void DrawProfilerStats()
+{
+	uint64 frequency = 0;
+	QueryPerformanceFrequency((LARGE_INTEGER*)&frequency);
+	const float ticksToMs = 1000.0f / frequency;
+
+	// Only root events are counted: nested events are already covered by their parent, and summing the
+	// roots rather than taking the outer span leaves out the gaps where the thread or queue sat idle.
+	auto SumRootEvents = [](Span<const ProfilerEventData::Event> events)
+		{
+			uint64 ticks = 0;
+			for (const ProfilerEventData::Event& event : events)
+			{
+				if (event.Depth == 0)
+					ticks += event.TicksEnd - event.TicksBegin;
+			}
+			return ticks;
+		};
+
+	// A single frame jitters far too much to read, so average over whatever history the profiler has.
+	auto AverageMs = [&](const URange& frames, auto&& getEvents)
+		{
+			uint64 ticks = 0;
+			for (uint32 frame = frames.Begin; frame < frames.End; ++frame)
+				ticks += SumRootEvents(getEvents(frame));
+			return frames.GetLength() > 0 ? ticksToMs * (float)ticks / (float)frames.GetLength() : 0.0f;
+		};
+
+	// CPUProfiler::Tick() opens a root event on the main thread that stays open until the next tick, so
+	// its duration covers the entire frame as the CPU sees it, waits included.
+	uint32 mainThreadIndex = 0;
+	for (const CPUProfiler::ThreadData& thread : gCPUProfiler.GetThreads())
+	{
+		if (strcmp(thread.Name, "Main Thread") == 0)
+		{
+			mainThreadIndex = thread.Index;
+			break;
+		}
+	}
+	float cpuMs = AverageMs(gCPUProfiler.GetFrameRange(), [&](uint32 frame) { return gCPUProfiler.GetEventData(frame).GetEvents(mainThreadIndex); });
+
+	if (ImGui::BeginTable("Stats", 2, ImGuiTableFlags_SizingFixedFit))
+	{
+		ImGui::TableNextColumn();	ImGui::Text("FPS");
+		ImGui::TableNextColumn();	ImGui::Text("%.1f", ImGui::GetIO().Framerate);
+
+		ImGui::TableNextColumn();	ImGui::Text("CPU");
+		ImGui::TableNextColumn();	ImGui::Text("%.2f ms", cpuMs);
+
+		URange gpuFrames = gGPUProfiler.GetFrameRange();
+		for (const GPUProfiler::QueueInfo& queue : gGPUProfiler.GetQueues())
+		{
+			float gpuMs = AverageMs(gpuFrames, [&](uint32 frame) { return gGPUProfiler.GetEventData(frame).GetEvents(queue.Index); });
+			ImGui::TableNextColumn();	ImGui::Text("GPU (%s)", queue.Name);
+			ImGui::TableNextColumn();	ImGui::Text("%.2f ms", gpuMs);
+		}
+
+		ImGui::EndTable();
+	}
+
+	if (gCPUProfiler.IsPaused())
+		ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.4f, 1.0f), "Profiler paused");
+}
+
 #endif

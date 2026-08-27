@@ -52,6 +52,70 @@ struct LivePPAgent
 #define LIVE_PP()
 #endif
 
+namespace Tweakables
+{
+	ConsoleVariable gLimitFPS("app.LimitFPS", true);
+	ConsoleVariable gMaxFPS("app.MaxFPS", 60);
+}
+
+// Throttle to the target frame rate. A high resolution waitable timer lands within a fraction of a
+// millisecond of the deadline, where Sleep() would overshoot by the ~15ms scheduler tick.
+static void LimitFrameRate()
+{
+	static const int64 frequency = []
+		{
+			LARGE_INTEGER value;
+			QueryPerformanceFrequency(&value);
+			return value.QuadPart;
+		}();
+
+	// Tracked as an absolute deadline rather than a per-frame delay so that frames finishing early or
+	// late don't make the pace drift.
+	static int64 nextFrameTicks = 0;
+
+	const int maxFPS = Tweakables::gMaxFPS;
+	if (!Tweakables::gLimitFPS || maxFPS <= 0)
+	{
+		nextFrameTicks = 0;
+		return;
+	}
+
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	const int64 frameTicks = frequency / maxFPS;
+
+	// Advance by exactly one frame so the pace stays anchored to a fixed grid rather than drifting by
+	// however long each frame happened to take.
+	nextFrameTicks = nextFrameTicks == 0 ? now.QuadPart : nextFrameTicks + frameTicks;
+
+	// The deadline has already passed, so the frame ran longer than the target rate allows. Resync to
+	// now and don't sleep at all: sleeping here would add a full period on top of an already slow frame,
+	// and carrying the deficit forward would stall the frames after it.
+	if (nextFrameTicks <= now.QuadPart)
+	{
+		nextFrameTicks = now.QuadPart;
+		return;
+	}
+
+	const int64 waitTicks = nextFrameTicks - now.QuadPart;
+
+	static HANDLE timer = []
+		{
+			HANDLE handle = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+			if (!handle)
+				handle = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+			return handle;
+		}();
+
+	if (timer)
+	{
+		LARGE_INTEGER dueTime;
+		dueTime.QuadPart = -(waitTicks * 10'000'000 / frequency);	// Negative is a relative time, in 100ns units
+		if (SetWaitableTimer(timer, &dueTime, 0, nullptr, nullptr, FALSE))
+			WaitForSingleObject(timer, INFINITE);
+	}
+}
+
 int App::Run()
 {
 	LIVE_PP();
@@ -185,6 +249,10 @@ void App::Update_Internal()
 	{
 		PROFILE_CPU_SCOPE("Wait for GPU frame");
 		m_pDevice->TickFrame();
+	}
+	{
+		PROFILE_CPU_SCOPE("Frame Limiter");
+		LimitFrameRate();
 	}
 }
 
