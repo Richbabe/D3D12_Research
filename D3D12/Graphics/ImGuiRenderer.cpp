@@ -305,7 +305,7 @@ void ImGuiRenderer::Initialize(GraphicsDevice* pDevice, WindowHandle window)
 		ImFontConfig fontConfig;
 		fontConfig.OversampleH = 2;
 		fontConfig.OversampleV = 2;
-		io.Fonts->AddFontFromFileTTF("Resources/Fonts/NotoSans-Regular.ttf", 20.0f, &fontConfig);
+		io.Fonts->AddFontFromFileTTF((Paths::ResourcesDir() + "Fonts/NotoSans-Regular.ttf").c_str(), 20.0f, &fontConfig);
 	}
 
 	{
@@ -313,7 +313,7 @@ void ImGuiRenderer::Initialize(GraphicsDevice* pDevice, WindowHandle window)
 		fontConfig.MergeMode = true;
 		fontConfig.GlyphMinAdvanceX = 15.0f; // Use if you want to make the icon monospaced
 		static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-		io.Fonts->AddFontFromFileTTF("Resources/Fonts/" FONT_ICON_FILE_NAME_FA, 15.0f, &fontConfig, icon_ranges);
+		io.Fonts->AddFontFromFileTTF((Paths::ResourcesDir() + "Fonts/" FONT_ICON_FILE_NAME_FA).c_str(), 15.0f, &fontConfig, icon_ranges);
 	}
 
 	ResourceFormat pixelFormat = ResourceFormat::RGBA8_UNORM;

@@ -160,7 +160,22 @@ namespace Paths
 
 	std::string GameDir()
 	{
-		return "./";
+		static const std::string dir = []
+			{
+				// Baked in at build time so the app can be launched from any working directory while keeping
+				// shader hot-reload watching the source tree. Falls back to the executable location for
+				// builds that get copied off the machine they were built on.
+#ifdef GAME_DIR
+				if (DirectoryExists(GAME_DIR))
+					return std::string(GAME_DIR);
+#endif
+				char path[MAX_PATH];
+				GetModuleFileNameA(nullptr, path, ARRAYSIZE(path));
+				std::string exeDir = GetDirectoryPath(path);
+				NormalizeInline(exeDir);
+				return exeDir;
+			}();
+		return dir;
 	}
 
 	std::string SavedDir()

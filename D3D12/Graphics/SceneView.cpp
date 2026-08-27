@@ -11,6 +11,7 @@
 #include "Core/ConsoleVariables.h"
 #include "Content/Image.h"
 #include "Core/Profiler.h"
+#include "Core/Paths.h"
 #include "Graphics/Techniques/DDGI.h"
 
 namespace Tweakables
@@ -337,8 +338,8 @@ namespace GraphicsCommon
 		};
 		RegisterDefaultTexture(DefaultTexture::CheckerPattern, "Checker Pattern", TextureDesc::Create2D(2, 2, ResourceFormat::RGBA8_UNORM, 1, textureFlags), checkerPixels);
 
-		DefaultTextures[(int)DefaultTexture::ColorNoise256] = CreateTextureFromFile(pDevice, "Resources/Textures/Noise.png", false, "Noise");
-		DefaultTextures[(int)DefaultTexture::BlueNoise512] = CreateTextureFromFile(pDevice, "Resources/Textures/BlueNoise.dds", false, "Blue Noise");
+		DefaultTextures[(int)DefaultTexture::ColorNoise256] = CreateTextureFromFile(pDevice, (Paths::ResourcesDir() + "Textures/Noise.png").c_str(), false, "Noise");
+		DefaultTextures[(int)DefaultTexture::BlueNoise512] = CreateTextureFromFile(pDevice, (Paths::ResourcesDir() + "Textures/BlueNoise.dds").c_str(), false, "Blue Noise");
 
 		{
 			CommandSignatureInitializer sigDesc;

@@ -149,7 +149,7 @@ void DemoApp::Init()
 
 	m_SceneData.AccelerationStructure.Init(m_pDevice);
 
-	SetupScene("Resources/Scenes/Sponza/Sponza.gltf");
+	SetupScene((Paths::ResourcesDir() + "Scenes/Sponza/Sponza.gltf").c_str());
 }
 
 void DemoApp::Shutdown()
@@ -192,7 +192,7 @@ void DemoApp::SetupScene(const char* pPath)
 		spot.Intensity = 100.0f;
 		spot.CastShadows = true;
 		spot.VolumetricLighting = true;
-		spot.pLightTexture = GraphicsCommon::CreateTextureFromFile(m_pDevice, "Resources/Textures/LightProjector.png", false, "Light Cookie");
+		spot.pLightTexture = GraphicsCommon::CreateTextureFromFile(m_pDevice, (Paths::ResourcesDir() + "Textures/LightProjector.png").c_str(), false, "Light Cookie");
 		spot.Type = LightType::Spot;
 
 		Vector3 positions[] = {
@@ -236,7 +236,7 @@ void DemoApp::SetupScene(const char* pPath)
 	}
 
 
-	m_pLensDirtTexture = GraphicsCommon::CreateTextureFromFile(m_pDevice, "Resources/Textures/LensDirt.dds", true, "Lens Dirt");
+	m_pLensDirtTexture = GraphicsCommon::CreateTextureFromFile(m_pDevice, (Paths::ResourcesDir() + "Textures/LensDirt.dds").c_str(), true, "Lens Dirt");
 }
 
 void DemoApp::Update()

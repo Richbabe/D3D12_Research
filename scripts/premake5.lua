@@ -77,7 +77,15 @@ workspace (ENGINE_NAME)
 			(SOURCE_DIR .. "**.c"),
 			(SOURCE_DIR .. "**.natvis"),
 			(SOURCE_DIR .. "**.editorconfig"),
+			(SOURCE_DIR .. "**.hlsl"),
+			(SOURCE_DIR .. "**.hlsli"),
 		}
+
+		-- Shaders are compiled at runtime by the engine. Without this VS assigns .hlsl to FxCompile and
+		-- tries to build them with FXC on every build.
+		filter { "files:**.hlsl or **.hlsli" }
+			buildaction "None"
+		filter {}
 
 		filter ("files:" .. SOURCE_DIR .. "External/**")
 			flags { "NoPCH" }
@@ -86,6 +94,11 @@ workspace (ENGINE_NAME)
 		filter {}
 
 		includedirs "$(ProjectDir)Resources/Shaders/Interop"
+
+		-- Lets the executable find its content without relying on the working directory.
+		-- Not a copy/junction next to the exe: directory change notifications don't travel across a
+		-- junction, which would silently break shader hot-reload.
+		defines ('GAME_DIR="' .. path.getabsolute(SOURCE_DIR) .. '/"')
 
 		-- D3D12
 		includedirs "$(SolutionDir)Libraries/D3D12/include"

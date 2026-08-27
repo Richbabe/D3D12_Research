@@ -13,6 +13,7 @@
 //Misc
 #include <mutex>
 #include <numeric>
+#include <algorithm>
 
 #include "Core/MinWindows.h"
 #include "d3d12.h"

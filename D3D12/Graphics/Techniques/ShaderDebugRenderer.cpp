@@ -6,6 +6,7 @@
 #include "Graphics/RenderGraph/RenderGraph.h"
 #include "Content/Image.h"
 #include "Graphics/SceneView.h"
+#include "Core/Paths.h"
 
 ShaderDebugRenderer::ShaderDebugRenderer(GraphicsDevice* pDevice)
 	: m_FontSize(24)
@@ -169,7 +170,7 @@ void ShaderDebugRenderer::BuildFontAtlas(GraphicsDevice* pDevice)
 	ImFontConfig fontConfig;
 	fontConfig.OversampleH = 2;
 	fontConfig.OversampleV = 2;
-	ImFont* pFont = fontAtlas.AddFontFromFileTTF("Resources/Fonts/JetBrainsMono-Regular.ttf", (float)m_FontSize, &fontConfig);
+	ImFont* pFont = fontAtlas.AddFontFromFileTTF((Paths::ResourcesDir() + "Fonts/JetBrainsMono-Regular.ttf").c_str(), (float)m_FontSize, &fontConfig);
 
 	{
 		unsigned char* pPixels;

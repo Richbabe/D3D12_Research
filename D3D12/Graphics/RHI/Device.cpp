@@ -15,6 +15,7 @@
 #include "pix3.h"
 #include "dxgidebug.h"
 #include "Core/Commandline.h"
+#include "Core/Paths.h"
 
 // Setup the Agility D3D12 SDK
 extern "C" { _declspec(dllexport) extern const UINT D3D12SDKVersion = D3D12_SDK_VERSION; }
@@ -406,7 +407,7 @@ GraphicsDevice::GraphicsDevice(GraphicsDeviceOptions options)
 	m_Capabilities.GetShaderModel(smMaj, smMin);
 	E_LOG(Info, "Shader Model %d.%d", smMaj, smMin);
 	m_pShaderManager = std::make_unique<ShaderManager>(smMaj, smMin);
-	m_pShaderManager->AddIncludeDir("Resources/Shaders/");
+	m_pShaderManager->AddIncludeDir(Paths::ShadersDir());
 }
 
 GraphicsDevice::~GraphicsDevice()
