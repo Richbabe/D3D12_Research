@@ -158,7 +158,7 @@ bool EvaluateIndirectBRDF(int rayType, float2 u, BrdfData brdfData, float3 N, fl
 		// Kulla17 - Energy conervation due to multiple scattering
 		float gloss = Pow4(1 - brdfData.Roughness);
 		float3 DFG = EnvDFGPolynomial(brdfData.Specular, gloss, NdotV);
-		float3 energyCompensation = 1.0f + brdfData.Specular * (1.0f / DFG.y - 1.0f);
+		float3 energyCompensation = DFG.y > 0.0f ? 1.0f + brdfData.Specular * (1.0f / DFG.y - 1.0f) : 1.0f;
 		weight *= energyCompensation;
 
 		directionLocal = Llocal;

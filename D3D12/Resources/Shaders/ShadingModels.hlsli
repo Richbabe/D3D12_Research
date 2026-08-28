@@ -80,7 +80,7 @@ LightResult DefaultLitBxDF(float3 specularColor, float specularRoughness, float3
 #if 0
 	float gloss = Pow4(1 - specularRoughness);
 	float3 DFG = EnvDFGPolynomial(specularColor, gloss, NdotV);
-	float3 energyCompensation = 1.0f + specularColor * (1.0f / DFG.y - 1.0f);
+	float3 energyCompensation = DFG.y > 0.0f ? 1.0f + specularColor * (1.0f / DFG.y - 1.0f) : 1.0f;
 	lighting.Specular *= energyCompensation;
 #endif
 
