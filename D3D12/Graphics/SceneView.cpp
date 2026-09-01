@@ -142,8 +142,8 @@ namespace Renderer
 					batch.pMesh				= &mesh;
 					batch.BlendMode			= GetBlendMode(meshMaterial.AlphaMode);
 					batch.WorldMatrix		= transform.World;
-					batch.Radius			= Vector3(batch.Bounds.Extents).Length();
 					mesh.Bounds.Transform(batch.Bounds, batch.WorldMatrix);
+					batch.Radius			= Vector3(batch.Bounds.Extents).Length();
 
 					ShaderInterop::InstanceData& meshInstance = meshInstances.emplace_back();
 					meshInstance.ID						= instanceID;

@@ -13,6 +13,29 @@ This is a personal toy renderer meant as a playground for experimenting with ide
 - Run `scripts/Generate_VS2022_Windows.bat` to generate VS project files.
 - Open `D3D12.sln` and Compile/Run
 
+## Scenes
+
+Sponza ships with the repository and is loaded by default. Bistro is optional and
+has to be fetched separately, since its geometry and textures come to about 2GB:
+
+```
+python scripts/fetch_bistro.py
+```
+
+This pulls the scene from [NVIDIA RTXDI-Assets](https://github.com/NVIDIA-RTX/RTXDI-Assets)
+(requires [git-lfs](https://git-lfs.com)), converts the glTF to reference its DDS
+textures directly, and writes everything to `D3D12/Resources/Scenes/Bistro`. Pass
+`--cleanup` to discard the intermediate download afterwards. Once it's in place,
+switch between scenes from the `File > Load Scene` menu.
+
+The lighting rig (`bistro-rtxdi.scene.json`) is tracked in this repository and is
+loaded alongside the geometry, so Bistro comes up lit rather than using the
+built-in light setup that the other scenes fall back to.
+
+Bistro is the Amazon Lumberyard Bistro scene, released through
+[NVIDIA ORCA](https://developer.nvidia.com/orca/amazon-lumberyard-bistro) under
+CC-BY 4.0.
+
 ## Images
 
 ### Visibility Buffer - Deferred Texturing

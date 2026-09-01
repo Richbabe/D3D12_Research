@@ -20,6 +20,10 @@ class CBTTessellation
 public:
 	CBTTessellation(GraphicsDevice* pDevice);
 
+	// Draws the CBT settings widgets. Kept separate from rendering so the settings stay
+	// reachable while terrain rendering is disabled.
+	void RenderUI();
+
 	void RasterMain(RGGraph& graph, const SceneView* pView, const SceneTextures& sceneTextures);
 	void Shade(RGGraph& graph, const SceneView* pView, const SceneTextures& sceneTextures, RGTexture* pFog);
 	static void CBTDemo();

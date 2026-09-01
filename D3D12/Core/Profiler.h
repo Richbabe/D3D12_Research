@@ -129,6 +129,15 @@ public:
 		m_Offset = 0;
 	}
 
+	// Only valid before any allocations are made
+	void Resize(uint32 size)
+	{
+		check(m_Offset == 0);
+		delete[] m_pData;
+		m_pData = new char[size];
+		m_Size = size;
+	}
+
 	template<typename T, typename... Args>
 	T* Allocate(Args... args)
 	{
@@ -171,6 +180,15 @@ public:
 	ProfilerEventData()
 		: Allocator(1 << 16)
 	{}
+
+	// Bytes reserved per event to store a copy of its name
+	static constexpr uint32 EventNameBudget = 64;
+
+	void Initialize(uint32 maxEvents)
+	{
+		Events.resize(maxEvents);
+		Allocator.Resize(maxEvents * EventNameBudget);
+	}
 
 	// Single event
 	struct Event

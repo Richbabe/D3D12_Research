@@ -36,6 +36,7 @@
 #include "Core/ConsoleVariables.h"
 #include "Core/Utils.h"
 #include "Core/Profiler.h"
+#include "Core/Json.h"
 
 #include <External/Imgui/imgui_internal.h>
 #include <External/FontAwesome/IconsFontAwesome4.h>
@@ -81,7 +82,7 @@ namespace Tweakables
 	ConsoleVariable gRaytracedReflections("r.Raytracing.Reflections", false);
 	ConsoleVariable gTLASBoundsThreshold("r.Raytracing.TLASBoundsThreshold", 1.0f * Math::DegreesToRadians);
 	ConsoleVariable gSSRSamples("r.SSRSamples", 8);
-	ConsoleVariable gRenderTerrain("r.Terrain", true);
+	ConsoleVariable gRenderTerrain("r.Terrain", false);
 	ConsoleVariable gOcclusionCulling("r.OcclusionCulling", true);
 	ConsoleVariable gWorkGraph("r.WorkGraph", false);
 
@@ -113,6 +114,161 @@ namespace Tweakables
 	// Frame pacing, owned by App
 	extern ConsoleVariable<bool> gLimitFPS;
 	extern ConsoleVariable<int> gMaxFPS;
+}
+
+
+struct SceneDescription
+{
+	const char* pName;
+	const char* pPath;
+	// Optional scene description holding the lighting rig. Scenes without one get a default sun and spotlights.
+	const char* pLightsPath;
+	Vector3 CameraPosition;
+	float CameraYaw;
+	float CameraPitch;
+	float ViewDistance;
+};
+
+// Paths are relative to the resources directory. The first entry is loaded on startup and
+// doubles as the fallback camera setup for meshes loaded through the file dialog.
+static const SceneDescription gScenes[] = {
+	{ "Sponza",	"Scenes/Sponza/Sponza.gltf",	nullptr,									Vector3(5.80f, 0.96f, 0.25f),		Math::Radians(-89.72f),	Math::Radians(0.73f),	80.0f },
+	{ "Bistro",	"Scenes/Bistro/Bistro.gltf",	"Scenes/Bistro/bistro-rtxdi.scene.json",	Vector3(-25.36f, 2.74f, -11.64f),	Math::Radians(85.12f),	Math::Radians(-0.18f),	300.0f },
+};
+
+static std::string ResolveScenePath(const char* pPath)
+{
+	return Paths::Normalize(Paths::MakeAbsolute(pPath));
+}
+
+static std::string GetScenePath(const SceneDescription& scene)
+{
+	return ResolveScenePath((Paths::ResourcesDir() + scene.pPath).c_str());
+}
+
+// The renderer indexes World::Sunlight directly, so every scene needs exactly one directional light.
+// Colour and intensity are driven by the atmosphere tweakables every frame, only the rotation sticks.
+static entt::entity CreateSunlight(World& world, const Quaternion& rotation)
+{
+	entt::entity entity = world.CreateEntity("Sunlight");
+	Transform& transform = world.Registry.emplace<Transform>(entity);
+	transform.Rotation = rotation;
+
+	Light& light = world.Registry.emplace<Light>(entity);
+	light.Type = LightType::Directional;
+	light.Intensity = 10;
+	light.CastShadows = true;
+	light.VolumetricLighting = true;
+
+	world.Sunlight = entity;
+	return entity;
+}
+
+// Reads the lighting rig out of a Donut scene description, the format NVIDIA ships the RTXDI assets in.
+// Only the 'Lights' subtree is used; models, animations and probe volumes are ignored.
+// Returns false when the file is missing or holds no usable lights, leaving the world untouched.
+static bool LoadSceneLights(const char* pFilePath, World& world)
+{
+	Json::Value root;
+	if (!Json::ParseFile(pFilePath, root))
+	{
+		E_LOG(Warning, "Scene lights - Failed to parse '%s'", pFilePath);
+		return false;
+	}
+
+	const Json::Value* pLightNodes = nullptr;
+	const Json::Value& graph = root["graph"];
+	for (uint32 i = 0; i < graph.GetSize(); ++i)
+	{
+		if (strcmp(graph[i]["name"].GetString(), "Lights") == 0)
+			pLightNodes = &graph[i]["children"];
+	}
+	if (!pLightNodes || pLightNodes->GetSize() == 0)
+	{
+		E_LOG(Warning, "Scene lights - '%s' has no 'Lights' group", pFilePath);
+		return false;
+	}
+
+	// The glTF loader mirrors Z to get from the source's right-handed space into the engine's
+	// left-handed one, so anything authored alongside it has to go through the same flip.
+	auto MirrorZ = [](const Vector3& v) { return Vector3(v.x, v.y, -v.z); };
+
+	uint32 numLights = 0;
+	bool hasSun = false;
+
+	for (uint32 i = 0; i < pLightNodes->GetSize(); ++i)
+	{
+		const Json::Value& node = (*pLightNodes)[i];
+
+		Vector3 position = Vector3::Zero;
+		const Json::Value& translation = node["translation"];
+		if (translation.GetSize() == 3)
+			position = MirrorZ(Vector3(translation[0].GetFloat(), translation[1].GetFloat(), translation[2].GetFloat()));
+
+		// Lights shine down their local -Z. Resolving that to a world direction before mirroring is
+		// less error-prone than trying to mirror the quaternion itself.
+		Quaternion sourceRotation = Quaternion::Identity;
+		const Json::Value& rotation = node["rotation"];
+		if (rotation.GetSize() == 4)
+			sourceRotation = Quaternion(rotation[0].GetFloat(), rotation[1].GetFloat(), rotation[2].GetFloat(), rotation[3].GetFloat());
+		Vector3 direction = MirrorZ(Vector3::Transform(Vector3(0, 0, -1), sourceRotation));
+		Quaternion worldRotation = Quaternion::LookRotation(direction, Vector3::Up);
+
+		const char* pType = node["type"].GetString();
+		if (strcmp(pType, "DirectionalLight") == 0)
+		{
+			if (hasSun)
+				continue;
+			CreateSunlight(world, worldRotation);
+			hasSun = true;
+			++numLights;
+			continue;
+		}
+
+		Light light;
+		if (strcmp(pType, "SpotLight") == 0)
+		{
+			light.Type = LightType::Spot;
+			// Donut measures the cone from its axis, the engine stores the full cone angle.
+			light.PenumbraAngleDegrees = 2.0f * node["innerAngle"].GetFloat(30.0f);
+			light.UmbraAngleDegrees = 2.0f * node["outerAngle"].GetFloat(45.0f);
+		}
+		else if (strcmp(pType, "PointLight") == 0)
+		{
+			light.Type = LightType::Point;
+		}
+		else
+		{
+			continue;
+		}
+
+		light.Intensity = node["intensity"].GetFloat(1.0f);
+		light.Range = node["range"].GetFloat(10.0f);
+		// These rigs are authored as many-light stress tests, so every light casting shadows would
+		// add a shadow map and a full GPU-culled raster pipeline each. Only the sun does by default.
+		light.CastShadows = false;
+		light.VolumetricLighting = true;
+
+		const Json::Value& color = node["color"];
+		if (color.GetSize() == 3)
+			light.Colour = Color(color[0].GetFloat(), color[1].GetFloat(), color[2].GetFloat(), 1.0f);
+
+		entt::entity entity = world.CreateEntity(node["name"].GetString("Light"));
+		Transform& transform = world.Registry.emplace<Transform>(entity);
+		transform.Position = position;
+		transform.Rotation = worldRotation;
+		world.Registry.emplace<Light>(entity, light);
+		++numLights;
+	}
+
+	if (numLights == 0)
+		return false;
+
+	if (!hasSun)
+		CreateSunlight(world, Quaternion::CreateFromYawPitchRoll(Math::Radians(8.6f), Math::Radians(71.1f), 0.0f));
+
+	E_LOG(Info, "Scene lights - Loaded %d lights from '%s'", numLights, pFilePath);
+	return true;
 }
 
 
@@ -153,7 +309,7 @@ void DemoApp::Init()
 
 	m_SceneData.AccelerationStructure.Init(m_pDevice);
 
-	SetupScene((Paths::ResourcesDir() + "Scenes/Sponza/Sponza.gltf").c_str());
+	SetupScene(GetScenePath(gScenes[0]).c_str());
 }
 
 void DemoApp::Shutdown()
@@ -164,32 +320,34 @@ void DemoApp::Shutdown()
 void DemoApp::SetupScene(const char* pPath)
 {
 	m_World = {};
+	m_ScenePath = ResolveScenePath(pPath);
+
+	const SceneDescription* pScene = &gScenes[0];
+	for (const SceneDescription& scene : gScenes)
+	{
+		if (GetScenePath(scene) == m_ScenePath)
+			pScene = &scene;
+	}
 
 	m_pCamera = std::make_unique<FreeCamera>();
-	m_pCamera->SetNearPlane(80.0f);
+	// Depth is reversed, so the near plane holds the view distance and the far plane the closest visible depth.
+	m_pCamera->SetNearPlane(pScene->ViewDistance);
 	m_pCamera->SetFarPlane(0.1f);
-	m_pCamera->SetPosition(Vector3(-1.3f, 12.4f, -1.5f));
-	m_pCamera->SetRotation(Quaternion::CreateFromYawPitchRoll(Math::PI_DIV_4, Math::PI_DIV_4 * 0.5f, 0));
+	m_pCamera->SetPosition(pScene->CameraPosition);
+	m_pCamera->SetRotation(Quaternion::CreateFromYawPitchRoll(pScene->CameraYaw, pScene->CameraPitch, 0));
 	OnResizeViewport(16, 16);
 
 	SceneLoader::Load(pPath, m_pDevice, m_World, 1.0f);
 
+	// The built-in rig below is sized for Sponza's atrium, so it's only used for scenes that don't ship their own.
+	bool hasSceneLights = false;
+	if (pScene->pLightsPath)
+		hasSceneLights = LoadSceneLights((Paths::ResourcesDir() + pScene->pLightsPath).c_str(), m_World);
 
+	if (!hasSceneLights)
 	{
-		entt::entity entity = m_World.CreateEntity("Sunlight");
-		Transform& transform = m_World.Registry.emplace<Transform>(entity);
-		transform.Position = Vector3::Zero;
-		transform.Rotation = Quaternion::CreateFromYawPitchRoll(Math::Radians(8.6f), Math::Radians(71.1f), 0.0f);
+		CreateSunlight(m_World, Quaternion::CreateFromYawPitchRoll(Math::Radians(8.6f), Math::Radians(71.1f), 0.0f));
 
-		Light& sunLight = m_World.Registry.emplace<Light>(entity);
-		sunLight.Intensity = 10;
-		sunLight.CastShadows = true;
-		sunLight.VolumetricLighting = true;
-		sunLight.Type = LightType::Directional;
-		m_World.Sunlight = entity;
-	}
-
-	{
 		Light spot;
 		spot.Range = 4;
 		spot.UmbraAngleDegrees = 70.0f;
@@ -1074,6 +1232,23 @@ void DemoApp::UpdateImGui()
 	{
 		if (ImGui::BeginMenu(ICON_FA_FILE " File"))
 		{
+			if (ImGui::BeginMenu(ICON_FA_GLOBE " Load Scene"))
+			{
+				for (const SceneDescription& scene : gScenes)
+				{
+					std::string path = GetScenePath(scene);
+					bool isAvailable = Paths::FileExists(path.c_str());
+					if (ImGui::MenuItem(scene.pName, nullptr, m_ScenePath == path, isAvailable))
+					{
+						SetupScene(path.c_str());
+					}
+					if (!isAvailable && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					{
+						ImGui::SetTooltip("Not found: %s", path.c_str());
+					}
+				}
+				ImGui::EndMenu();
+			}
 			if (ImGui::MenuItem(ICON_FA_FILE " Load Mesh", nullptr, nullptr))
 			{
 				OPENFILENAME ofn{};
@@ -1419,8 +1594,13 @@ void DemoApp::UpdateImGui()
 			if (m_pCamera)
 			{
 				const ViewTransform& view = m_pCamera->GetViewTransform();
+				const Vector3 position = m_pCamera->GetPosition();
+				const Vector3 euler = m_pCamera->GetRotation().ToEuler() * Math::RadiansToDegrees;
+
 				ImGui::Text("Camera");
-				ImGui::Text("Location: [%.2f, %.2f, %.2f]", m_pCamera->GetPosition().x, m_pCamera->GetPosition().y, m_pCamera->GetPosition().z);
+				ImGui::Text("Location: [%.2f, %.2f, %.2f]", position.x, position.y, position.z);
+				ImGui::Text("Rotation: Yaw %.2f, Pitch %.2f", euler.y, euler.x);
+
 				float fov = view.FoV;
 				if (ImGui::SliderAngle("Field of View", &fov, 10, 120))
 				{
@@ -1521,7 +1701,17 @@ void DemoApp::UpdateImGui()
 			ImGui::Checkbox("Visualize Light Density", &Tweakables::gVisualizeLightDensity.Get());
 			ImGui::SliderInt("SSR Samples", &Tweakables::gSSRSamples.Get(), 0, 32);
 			ImGui::Checkbox("Object Bounds", &Tweakables::gRenderObjectBounds.Get());
+		}
+
+		if (ImGui::CollapsingHeader("Terrain"))
+		{
 			ImGui::Checkbox("Render Terrain", &Tweakables::gRenderTerrain.Get());
+
+			if (ImGui::TreeNode("CBT"))
+			{
+				m_pCBTTessellation->RenderUI();
+				ImGui::TreePop();
+			}
 		}
 
 		if (ImGui::CollapsingHeader("Raytracing"))

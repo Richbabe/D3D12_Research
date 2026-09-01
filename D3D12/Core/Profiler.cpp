@@ -65,7 +65,7 @@ void GPUProfiler::Initialize(
 	for (uint32 i = 0; i < sampleHistory; ++i)
 	{
 		ProfilerEventData& eventData = m_pEventData[i];
-		eventData.Events.resize(maxNumEvents + maxNumCopyEvents);
+		eventData.Initialize(maxNumEvents + maxNumCopyEvents);
 		eventData.GroupedEvents.resize(queues.GetSize());
 	}
 
@@ -380,7 +380,7 @@ void CPUProfiler::Initialize(uint32 historySize, uint32 maxEvents)
 	m_HistorySize = historySize;
 
 	for (uint32 i = 0; i < historySize; ++i)
-		m_pEventData[i].Events.resize(maxEvents);
+		m_pEventData[i].Initialize(maxEvents);
 
 	m_IsInitialized = true;
 }

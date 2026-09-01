@@ -135,11 +135,14 @@ int App::Run()
 static void InitializeProfiler(GraphicsDevice* pDevice)
 {
 	const uint32 frameHistory = 8;
-	const uint32 maxEvents = 2048;
-	const uint32 maxCopyEvents = 2048;
+	// Loading a large scene records a lot of events in a single frame, so both budgets are generous.
+	// The GPU profiler packs range indices in 15 bits, capping the two GPU budgets at 32767 combined.
+	const uint32 maxCPUEvents = 65535;
+	const uint32 maxEvents = 30000;
+	const uint32 maxCopyEvents = 2000;
 	const uint32 maxActiveCmdLists = 64;
-	
-	gCPUProfiler.Initialize(frameHistory, maxEvents);
+
+	gCPUProfiler.Initialize(frameHistory, maxCPUEvents);
 
 #if ENABLE_PIX
 	CPUProfilerCallbacks cpuCallbacks;

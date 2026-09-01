@@ -67,9 +67,11 @@ public:
 		T Object;
 	};
 
-	RGGraphAllocator(uint64 size)
-		: m_Size(size), m_pData(new char[size]), m_pCurrentOffset(m_pData)
-	{}
+	RGGraphAllocator(uint64 blockSize)
+		: m_BlockSize(blockSize)
+	{
+		AddBlock(blockSize);
+	}
 
 	~RGGraphAllocator()
 	{
@@ -77,7 +79,8 @@ public:
 		{
 			m_NonPODAllocations[i]->~AllocatedObject();
 		}
-		delete[] m_pData;
+		for (char* pBlock : m_Blocks)
+			delete[] pBlock;
 	}
 
 	template<typename T, typename ...Args>
@@ -108,7 +111,12 @@ public:
 
 	NO_DISCARD void* Allocate(uint64 size)
 	{
-		check(m_pCurrentOffset - m_pData + size < m_Size);
+		// Pass and resource counts scale with scene content, so a fixed capacity would be a hard
+		// limit on how much a frame can record. Grow by adding a block instead of reallocating:
+		// pointers handed out earlier have to stay valid for the lifetime of the graph.
+		if (size > (uint64)(m_pBlockEnd - m_pCurrentOffset))
+			AddBlock(size);
+
 		void* pData = m_pCurrentOffset;
 		m_pCurrentOffset += size;
 
@@ -125,14 +133,31 @@ public:
 		return pData;
 	}
 
-	uint64 GetSize() const { return m_pCurrentOffset - m_pData; }
-	uint64 GetCapacity() const { return m_Size; }
+	uint64 GetSize() const { return m_UsedInRetiredBlocks + (uint64)(m_pCurrentOffset - m_Blocks.back()); }
+	uint64 GetCapacity() const { return m_Capacity; }
 
 private:
+	void AddBlock(uint64 minSize)
+	{
+		if (!m_Blocks.empty())
+			m_UsedInRetiredBlocks += m_pCurrentOffset - m_Blocks.back();
+
+		// An allocation larger than the block size gets a block of its own.
+		uint64 size = Math::Max(m_BlockSize, minSize);
+		char* pBlock = new char[size];
+		m_Blocks.push_back(pBlock);
+		m_pCurrentOffset = pBlock;
+		m_pBlockEnd = pBlock + size;
+		m_Capacity += size;
+	}
+
 	std::vector<AllocatedObject*> m_NonPODAllocations;
-	uint64 m_Size;
-	char* m_pData;
-	char* m_pCurrentOffset;
+	std::vector<char*> m_Blocks;
+	uint64 m_BlockSize;
+	uint64 m_Capacity				= 0;
+	uint64 m_UsedInRetiredBlocks	= 0;
+	char* m_pCurrentOffset			= nullptr;
+	char* m_pBlockEnd				= nullptr;
 };
 
 struct RGEvent

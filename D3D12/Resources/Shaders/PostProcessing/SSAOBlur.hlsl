@@ -63,6 +63,5 @@ void CSMain(uint3 groupId : SV_GroupID, uint groupIndex : SV_GroupIndex)
 	}
 
 	int2 pixel = groupBegin + groupIndex * direction;
-	uAmbientOcclusion[pixel] = avgOcclusion
-	;
+	uAmbientOcclusion[pixel] = avgOcclusion;
 }

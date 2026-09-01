@@ -128,42 +128,38 @@ struct IndirectDrawArgs
 	D3D12_DRAW_ARGUMENTS DebugDrawArgs;
 };
 
-void CBTTessellation::RasterMain(RGGraph& graph, const SceneView* pView, const SceneTextures& sceneTextures)
+void CBTTessellation::RenderUI()
 {
-	if (ImGui::Begin("Parameters"))
-	{
-		if (ImGui::CollapsingHeader("CBT"))
-		{
-			bool invalidatePSOs = false;
+	bool invalidatePSOs = false;
 
-			ImGui::SliderFloat("Height Scale", &CBTSettings::HeightScale, 1.0f, 40.0f);
-			if (ImGui::SliderInt("CBT Depth", &CBTSettings::CBTDepth, 10, 28))
-				m_CBTData.pCBTBuffer = nullptr;
+	ImGui::SliderFloat("Height Scale", &CBTSettings::HeightScale, 1.0f, 40.0f);
+	if (ImGui::SliderInt("CBT Depth", &CBTSettings::CBTDepth, 10, 28))
+		m_CBTData.pCBTBuffer = nullptr;
 
-			invalidatePSOs |= ImGui::SliderInt("Triangle SubD", &CBTSettings::SubD, 0, 3);
-			ImGui::SliderFloat("Screen Size Bias", &CBTSettings::ScreenSizeBias, 0, 15);
-			ImGui::SliderFloat("Heightmap Variance Bias", &CBTSettings::HeightmapVarianceBias, 0, 1.0f);
-			ImGui::Checkbox("Debug Visualize", &CBTSettings::DebugVisualize);
-			ImGui::Checkbox("CPU Demo", &CBTSettings::CpuDemo);
-			if (m_pDevice->GetCapabilities().SupportsMeshShading())
-				ImGui::Checkbox("Mesh Shader", &CBTSettings::MeshShader);
+	invalidatePSOs |= ImGui::SliderInt("Triangle SubD", &CBTSettings::SubD, 0, 3);
+	ImGui::SliderFloat("Screen Size Bias", &CBTSettings::ScreenSizeBias, 0, 15);
+	ImGui::SliderFloat("Heightmap Variance Bias", &CBTSettings::HeightmapVarianceBias, 0, 1.0f);
+	ImGui::Checkbox("Debug Visualize", &CBTSettings::DebugVisualize);
+	ImGui::Checkbox("CPU Demo", &CBTSettings::CpuDemo);
+	if (m_pDevice->GetCapabilities().SupportsMeshShading())
+		ImGui::Checkbox("Mesh Shader", &CBTSettings::MeshShader);
 
-			invalidatePSOs |= ImGui::Checkbox("Frustum Cull", &CBTSettings::FrustumCull);
-			invalidatePSOs |= ImGui::Checkbox("Displacement LOD", &CBTSettings::DisplacementLOD);
-			invalidatePSOs |= ImGui::Checkbox("Distance LOD", &CBTSettings::DistanceLOD);
-			invalidatePSOs |= ImGui::Checkbox("Always Subdivide", &CBTSettings::AlwaysSubdivide);
+	invalidatePSOs |= ImGui::Checkbox("Frustum Cull", &CBTSettings::FrustumCull);
+	invalidatePSOs |= ImGui::Checkbox("Displacement LOD", &CBTSettings::DisplacementLOD);
+	invalidatePSOs |= ImGui::Checkbox("Distance LOD", &CBTSettings::DistanceLOD);
+	invalidatePSOs |= ImGui::Checkbox("Always Subdivide", &CBTSettings::AlwaysSubdivide);
 
-			if(invalidatePSOs)
-				SetupPipelines(m_pDevice);
-		}
-	}
-	ImGui::End();
+	if (invalidatePSOs)
+		SetupPipelines(m_pDevice);
 
 	if (CBTSettings::CpuDemo)
 	{
 		CBTDemo();
 	}
+}
 
+void CBTTessellation::RasterMain(RGGraph& graph, const SceneView* pView, const SceneTextures& sceneTextures)
+{
 	RG_GRAPH_SCOPE("CBT", graph);
 
 	RGBuffer* pCBTBuffer = graph.TryImport(m_CBTData.pCBTBuffer);

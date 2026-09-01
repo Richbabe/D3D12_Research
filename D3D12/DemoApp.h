@@ -100,6 +100,7 @@ private:
 
 	World m_World;
 	SceneView m_SceneData;
+	std::string m_ScenePath;
 
 	//Shadow mapping
 	Ref<PipelineState> m_pShadowsOpaquePSO;
