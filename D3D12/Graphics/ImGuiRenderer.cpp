@@ -58,6 +58,107 @@ namespace ImGui
 				pDrawList->VtxBuffer[i].pos = ImRotate(pDrawList->VtxBuffer[i].pos - pos, cosAngle, sinAngle) + pos;
 		}
 	}
+
+	bool RangeSlider(const char* pLabel, float* pMin, float* pMax, float limitMin, float limitMax)
+	{
+		constexpr float triangleSize = 5.0f;
+
+		ImGuiWindow* pWindow = GetCurrentWindow();
+		ImGuiContext& g = *GImGui;
+		const ImGuiStyle& style = g.Style;
+
+		const float stepSize = (limitMax - limitMin) * 0.01f;
+		bool changed = false;
+
+		PushID(pLabel);
+
+		AlignTextToFramePadding();
+		TextUnformatted(pLabel);
+		SameLine();
+		SetNextItemWidth(60);
+		changed |= DragFloat("##RangeMin", pMin, stepSize, limitMin, *pMax, "%.2f");
+		SameLine();
+
+		SetNextItemWidth(200);
+		ImGuiID id = GetID("##RangeSlider");
+		const float width = CalcItemWidth();
+		const ImVec2 labelSize = CalcTextSize("", nullptr, true);
+		const ImRect frameBB(pWindow->DC.CursorPos, pWindow->DC.CursorPos + ImVec2(width, labelSize.y + style.FramePadding.y * 2.0f));
+		ItemSize(frameBB);
+		ItemAdd(frameBB, id);
+
+		RenderNavHighlight(frameBB, id);
+		RenderFrame(frameBB.Min, frameBB.Max, ImGuiCol_FrameBgActive, true, style.FrameRounding);
+
+		ImRect itemBB = ImRect(frameBB.Min + style.FramePadding, frameBB.Max - style.FramePadding);
+		float minRangePosX = Math::RemapRange(*pMin, limitMin, limitMax, itemBB.Min.x, itemBB.Max.x);
+		float maxRangePosX = Math::RemapRange(*pMax, limitMin, limitMax, itemBB.Min.x, itemBB.Max.x);
+
+		auto Handle = [&](const char* pHandleID, const ImRect& handleBB, float* pValue, float* pClampMin, float* pClampMax)
+		{
+			ImGuiID handleID = GetID(pHandleID);
+			ItemAdd(handleBB, handleID);
+			const bool hovered = ItemHoverable(handleBB, handleID, ImGuiItemFlags_None);
+			const bool clicked = hovered && IsMouseClicked(0, handleID);
+			if (clicked || g.NavActivateId == handleID)
+			{
+				if (clicked)
+					SetKeyOwner(ImGuiKey_MouseLeft, handleID);
+				SetActiveID(handleID, pWindow);
+				SetFocusID(handleID, pWindow);
+				FocusWindow(pWindow);
+			}
+			ImRect grabBB;
+			if (SliderBehavior(itemBB, handleID, ImGuiDataType_Float, pValue, &limitMin, &limitMax, "", ImGuiSliderFlags_None, &grabBB))
+			{
+				DataTypeClamp(ImGuiDataType_Float, pValue, pClampMin, pClampMax);
+				changed = true;
+			}
+		};
+
+		Handle("##SliderMin", ImRect(ImVec2(minRangePosX - triangleSize, itemBB.Min.y), ImVec2(minRangePosX + triangleSize, itemBB.Min.y + triangleSize * 2)), pMin, &limitMin, pMax);
+		Handle("##SliderMax", ImRect(ImVec2(maxRangePosX - triangleSize, itemBB.Max.y - triangleSize * 2), ImVec2(maxRangePosX + triangleSize, itemBB.Max.y)), pMax, pMin, &limitMax);
+
+		ImDrawList* pDrawList = GetWindowDrawList();
+
+		pDrawList->AddRectFilled(itemBB.Min, itemBB.Max, ImColor(0.3f, 0.8f, 1.0f, 1.0f));
+		pDrawList->AddRect(itemBB.Min, itemBB.Max, ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+		pDrawList->AddRectFilled(itemBB.Min, ImVec2(minRangePosX, itemBB.Max.y), ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+		pDrawList->AddRect(itemBB.Min, ImVec2(minRangePosX, itemBB.Max.y), ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+		pDrawList->AddRectFilled(ImVec2(maxRangePosX, itemBB.Min.y), itemBB.Max, ImColor(1.0f, 1.0f, 1.0f, 1.0f));
+		pDrawList->AddRect(ImVec2(maxRangePosX, itemBB.Min.y), itemBB.Max, ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+
+		const ImVec2 blackTri[] = {
+			ImVec2(-1.0f, 0.0f) * triangleSize + ImVec2(minRangePosX, itemBB.Min.y),
+			ImVec2(1.0f, 0.0f) * triangleSize + ImVec2(minRangePosX, itemBB.Min.y),
+			ImVec2(0.0f, 2.0f) * triangleSize + ImVec2(minRangePosX, itemBB.Min.y),
+		};
+		pDrawList->AddTriangleFilled(blackTri[0], blackTri[1], blackTri[2], ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+		pDrawList->AddTriangle(blackTri[0], blackTri[1], blackTri[2], ImColor(1.0f, 1.0f, 1.0f, 1.0f));
+
+		const ImVec2 whiteTri[] = {
+			ImVec2(1.0f, 0.0f) * triangleSize + ImVec2(maxRangePosX, itemBB.Max.y),
+			ImVec2(-1.0f, 0.0f) * triangleSize + ImVec2(maxRangePosX, itemBB.Max.y),
+			ImVec2(0.0f, -2.0f) * triangleSize + ImVec2(maxRangePosX, itemBB.Max.y),
+		};
+		pDrawList->AddTriangleFilled(whiteTri[0], whiteTri[1], whiteTri[2], ImColor(1.0f, 1.0f, 1.0f, 1.0f));
+		pDrawList->AddTriangle(whiteTri[0], whiteTri[1], whiteTri[2], ImColor(0.0f, 0.0f, 0.0f, 1.0f));
+
+		SameLine();
+		SetNextItemWidth(60);
+		changed |= DragFloat("##RangeMax", pMax, stepSize, *pMin, limitMax, "%.2f");
+
+		SameLine();
+		if (Button(ICON_FA_RECYCLE "##ResetRange"))
+		{
+			*pMin = limitMin;
+			*pMax = limitMax;
+			changed = true;
+		}
+
+		PopID();
+		return changed;
+	}
 }
 
 void ApplyImGuiStyle()

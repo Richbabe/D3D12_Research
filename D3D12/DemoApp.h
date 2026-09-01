@@ -27,6 +27,7 @@ class DDGI;
 class VolumetricFog;
 class ForwardRenderer;
 class LightCulling;
+class DebugViewSystem;
 struct Material;
 
 enum class RenderPath
@@ -88,6 +89,7 @@ private:
 	std::unique_ptr<DDGI> m_pDDGI;
 	std::unique_ptr<CaptureTextureSystem> m_pCaptureTextureSystem;
 	CaptureTextureContext m_CaptureTextureContext;
+	std::unique_ptr<DebugViewSystem> m_pDebugViewSystem;
 
 	VolumetricFogData m_FogData;
 

@@ -9,6 +9,11 @@
 #include "Graphics/RHI/PipelineState.h"
 #include "Graphics/RenderGraph/RenderGraph.h"
 #include "Graphics/SceneView.h"
+#include "DebugView.h"
+
+// Same view as SSAO declares: only one of the two runs per frame, and Declare dedupes by name
+static const DebugViewId gAODebugView = DebugViewRegistry::Declare("Ambient Occlusion",
+	DebugViewSettings{ { true, false, false, false }, 0.0f, 1.0f }, "0 = fully occluded, 1 = unoccluded");
 
 RTAO::RTAO(GraphicsDevice* pDevice)
 {
@@ -142,6 +147,7 @@ RGTexture* RTAO::Execute(RGGraph& graph, const SceneView* pView, SceneTextures& 
 			});
 
 	RGTexture* pFinalAOTarget = graph.Create("Ambient Occlusion", aoDesc);
+	DebugViewRegistry::Bind(gAODebugView, pFinalAOTarget);
 
 	graph.AddPass("Blur AO - Vertical", RGPassFlag::Compute)
 		.Read({ pRayTraceTarget, sceneTextures.pDepth })

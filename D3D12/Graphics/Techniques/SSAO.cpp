@@ -7,6 +7,12 @@
 #include "Graphics/RHI/Texture.h"
 #include "Graphics/RenderGraph/RenderGraph.h"
 #include "Graphics/SceneView.h"
+#include "DebugView.h"
+
+// AO stores visibility, so 0 reads as black for fully occluded and 1 as white for unoccluded.
+// Shared with RTAO: only one of the two runs per frame, and both bind the same view.
+static const DebugViewId gAODebugView = DebugViewRegistry::Declare("Ambient Occlusion",
+	DebugViewSettings{ { true, false, false, false }, 0.0f, 1.0f }, "0 = fully occluded, 1 = unoccluded");
 
 SSAO::SSAO(GraphicsDevice* pDevice)
 {
@@ -102,6 +108,7 @@ RGTexture* SSAO::Execute(RGGraph& graph, const SceneView* pView, SceneTextures& 
 			});
 
 	RGTexture* pAmbientOcclusion = graph.Create("Ambient Occlusion", textureDesc);
+	DebugViewRegistry::Bind(gAODebugView, pAmbientOcclusion);
 
 	graph.AddPass("Blur SSAO - Vertical", RGPassFlag::Compute)
 		.Read({ pBlurTarget, sceneTextures.pDepth })

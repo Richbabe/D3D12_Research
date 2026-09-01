@@ -25,6 +25,7 @@
 #include "Graphics/Techniques/ShaderDebugRenderer.h"
 #include "Graphics/Techniques/MeshletRasterizer.h"
 #include "Graphics/Techniques/VisualizeTexture.h"
+#include "Graphics/Techniques/DebugView.h"
 #include "Graphics/Techniques/LightCulling.h"
 #include "Graphics/Techniques/DDGI.h"
 #include "Graphics/ImGuiRenderer.h"
@@ -146,6 +147,7 @@ void DemoApp::Init()
 	m_pPathTracing			= std::make_unique<PathTracing>(m_pDevice);
 	m_pCBTTessellation		= std::make_unique<CBTTessellation>(m_pDevice);
 	m_pCaptureTextureSystem	= std::make_unique<CaptureTextureSystem>(m_pDevice);
+	m_pDebugViewSystem		= std::make_unique<DebugViewSystem>(m_pDevice);
 
 	InitializePipelines();
 
@@ -421,6 +423,7 @@ void DemoApp::Update()
 		}
 
 		RGGraph graph;
+		m_pDebugViewSystem->BeginFrame();
 
 		{
 			RG_GRAPH_SCOPE("GPU Frame", graph);
@@ -878,6 +881,13 @@ void DemoApp::Update()
 							});
 				}
 			}
+
+			// Drawn here so its section lands below the technique sections in the Parameters panel
+			m_pDebugViewSystem->DrawUI();
+
+			// Available in every render path, and overwrites the tonemapped result since debug colors are display-referred
+			if (m_pDebugViewSystem->IsActive())
+				m_pDebugViewSystem->Render(graph, sceneTextures.pColorTarget);
 
 			DebugRenderer::Get()->Render(graph, pView, sceneTextures.pColorTarget, sceneTextures.pDepth);
 
