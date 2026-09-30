@@ -159,7 +159,7 @@ RGTexture* RTAO::Execute(RGGraph& graph, const RenderView* pView, RGTexture* pDe
 	DebugViewRegistry::Bind(gAODebugView, pFinalAOTarget);
 
 	graph.AddPass("Blur AO - Vertical", RGPassFlag::Compute)
-		.Read({ pRayTraceTarget, pDepth })
+		.Read({ pBlurTarget1, pDepth })
 		.Write(pFinalAOTarget)
 		.Bind([=](CommandContext& context, const RGResources& resources)
 			{
@@ -180,7 +180,7 @@ RGTexture* RTAO::Execute(RGGraph& graph, const RenderView* pView, RGTexture* pDe
 				shaderParameters.DimensionsInv = Vector2(1.0f / pTarget->GetWidth(), 1.0f / pTarget->GetHeight());
 				shaderParameters.Horizontal = 0;
 				shaderParameters.SceneDepth = resources.GetSRV(pDepth);
-				shaderParameters.Input = resources.GetSRV(pRayTraceTarget);
+				shaderParameters.Input = resources.GetSRV(pBlurTarget1);
 				shaderParameters.Output = pTarget->GetUAV();
 
 				context.BindRootSRV(BindingSlot::PerInstance, shaderParameters);
