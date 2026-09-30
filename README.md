@@ -10,7 +10,7 @@ This is a personal toy renderer meant as a playground for experimenting with ide
 
 ## Building
 
-- Run `scripts/Generate_VS2022_Windows.bat` to generate VS project files.
+- Run `Generate_VS2022_Windows.bat` to generate VS project files.
 - Open `D3D12.sln` and Compile/Run
 
 ## Scenes
@@ -24,7 +24,7 @@ python scripts/fetch_bistro.py
 
 This pulls the scene from [NVIDIA RTXDI-Assets](https://github.com/NVIDIA-RTX/RTXDI-Assets)
 (requires [git-lfs](https://git-lfs.com)), converts the glTF to reference its DDS
-textures directly, and writes everything to `D3D12/Resources/Scenes/Bistro`. Pass
+textures directly, and writes everything to `Resources/Scenes/Bistro`. Pass
 `--cleanup` to discard the intermediate download afterwards. Once it's in place,
 switch between scenes from the `File > Load Scene` menu.
 

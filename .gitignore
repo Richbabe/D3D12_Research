@@ -27,8 +27,9 @@ StructLayoutSettings.json
 Saved
 __pycache__/
 D3D12/Resources/Scenes/_Local
+.idea
 
 # Downloaded from https://github.com/NVIDIA-RTX/RTXDI-Assets, too large to track.
 # The scene description is small and holds the lighting setup, so it's kept.
-D3D12/Resources/Scenes/Bistro/*
-!D3D12/Resources/Scenes/Bistro/bistro-rtxdi.scene.json
+Resources/Scenes/Bistro/*
+!Resources/Scenes/Bistro/bistro-rtxdi.scene.json

@@ -1,4 +1,4 @@
-"""Fetch the Bistro scene into D3D12/Resources/Scenes/Bistro.
+"""Fetch the Bistro scene into Resources/Scenes/Bistro.
 
 The assets are ~2GB, far past what's reasonable to track in git, so they're
 downloaded on demand from NVIDIA's RTXDI-Assets repository instead. Only the
@@ -24,7 +24,7 @@ LIGHTS_NAME = "bistro-rtxdi.scene.json"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLONE_DIR = os.path.join(REPO_ROOT, "_Temp", "RTXDI-Assets")
 SRC_DIR = os.path.join(CLONE_DIR, "bistro")
-DST_DIR = os.path.join(REPO_ROOT, "D3D12", "Resources", "Scenes", "Bistro")
+DST_DIR = os.path.join(REPO_ROOT, "Resources", "Scenes", "Bistro")
 
 
 def run(args, cwd=None, env=None):
